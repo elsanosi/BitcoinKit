@@ -323,6 +323,23 @@ public func == (lhs: BitArray, rhs: BitArray) -> Bool {
     return lhs.elementsEqual(rhs)
 }
 
+public mutating func replaceSubrange<C>(
+    _ subrange: Range<Int>,
+    with newElements: C
+) where C : Collection, C.Element == Bool {
+    // Remove the specified range
+    for _ in subrange.reversed() {
+        _ = remove(at: $0)
+    }
+
+    // Insert new elements in place
+    var insertIndex = subrange.lowerBound
+    for bit in newElements {
+        insert(bit, at: insertIndex)
+        insertIndex += 1
+    }
+}
+
 public extension BitArray {
     func asBoolArray() -> [Bool] {
         return self.map { $0 }
