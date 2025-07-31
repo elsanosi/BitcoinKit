@@ -1,48 +1,19 @@
-//
-//  Mnemonic+Checksum+Validate.swift
-//
-//  Copyright © 2018 BitcoinKit developers
-//
-//  Permission is hereby granted, free of charge, to any person obtaining a copy
-//  of this software and associated documentation files (the "Software"), to deal
-//  in the Software without restriction, including without limitation the rights
-//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-//  copies of the Software, and to permit persons to whom the Software is
-//  furnished to do so, subject to the following conditions:
-//
-//  The above copyright notice and this permission notice shall be included in
-//  all copies or substantial portions of the Software.
-//
-//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-//  THE SOFTWARE.
-//
-
 import Foundation
 
 public extension Mnemonic {
 
     static func deriveLanguageFromMnemonic(words: [String]) -> Language? {
-        func tryLangauge(
-            _ language: Language
-        ) -> Language? {
+        func tryLanguage(_ language: Language) -> Language? {
             let vocabulary = Set(wordList(for: language))
             let wordsLeftToCheck = Set(words)
-
-            guard wordsLeftToCheck.intersection(vocabulary) == wordsLeftToCheck else {
-                return nil
-            }
-
+            guard wordsLeftToCheck.isSubset(of: vocabulary) else { return nil }
             return language
         }
 
-        for langauge in Language.allCases {
-            guard let derived = tryLangauge(langauge) else { continue }
-            return derived
+        for language in Language.allCases {
+            if let derived = tryLanguage(language) {
+                return derived
+            }
         }
         return nil
     }
@@ -55,39 +26,47 @@ public extension Mnemonic {
         return try validateChecksumOf(mnemonic: mnemonicWords, language: derivedLanguage)
     }
 
-    // https://github.com/mcdallas/cryptotools/blob/master/btctools/HD/__init__.py#L27-L41
-    // alternative in C:
-    // https://github.com/trezor/trezor-crypto/blob/0c622d62e1f1e052c2292d39093222ce358ca7b0/bip39.c#L161-L179
     @discardableResult
     static func validateChecksumOf(mnemonic mnemonicWords: [String], language: Language) throws -> Bool {
         let vocabulary = wordList(for: language)
 
+        // Map words to UInt11 indices safely
         let indices: [UInt11] = try mnemonicWords.map { word in
             guard let indexInVocabulary = vocabulary.firstIndex(of: word) else {
                 throw MnemonicError.validationError(.wordNotInList(word, language: language))
             }
             guard let indexAs11Bits = UInt11(exactly: indexInVocabulary) else {
-                fatalError("Unexpected error, is word list longer than 2048 words, it shold not be")
+                fatalError("Word list longer than 2048 words (unexpected)")
             }
             return indexAs11Bits
         }
 
-        let bitArray = BitArray(indices)
+        // Initialize BitArray from binary string (from UInt11 array converted to binary string)
+        let binaryString = indices.map { $0.binaryString }.joined()
+        guard let bitArray = BitArray(binaryString: binaryString) else {
+            fatalError("Failed to create BitArray from UInt11 binary string")
+        }
 
         let checksumLength = mnemonicWords.count / 3
 
-        let dataBits = bitArray.prefix(subtractFromCount: checksumLength)
-        let checksumBits = bitArray.suffix(maxCount: checksumLength)
+        // Use standard prefix and suffix with Int param (not maxCount)
+        let dataBits = bitArray.prefix(bitArray.count - checksumLength)
+        let checksumBits = bitArray.suffix(checksumLength)
 
+        // Compute hash
         let hash = Crypto.sha256(dataBits.asData())
 
-        let hashBits = BitArray(data: hash).prefix(maxCount: checksumLength)
+        // Create BitArray from hash data again from binary string
+        let hashBinaryString = hash.binaryString
+        guard let hashBits = BitArray(binaryString: hashBinaryString)?.prefix(checksumLength) else {
+            fatalError("Failed to create BitArray from hash")
+        }
 
-        guard hashBits == checksumBits else {
+        // Compare bits (convert slices to arrays to be sure)
+        guard Array(hashBits) == Array(checksumBits) else {
             throw MnemonicError.validationError(.checksumMismatch)
         }
 
-        // All is well
         return true
     }
 }
