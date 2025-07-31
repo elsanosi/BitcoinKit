@@ -54,7 +54,8 @@ public extension Mnemonic {
         let checksumBits = bitArray.suffix(checksumLength)
 
         // Compute hash
-        let hash = Crypto.sha256(dataBits.asData())
+        let hash = Crypto.sha256(BitArray(dataBits).asData())
+
 
         // Create BitArray from hash data again from binary string
         let hashBinaryString = hash.binaryString
