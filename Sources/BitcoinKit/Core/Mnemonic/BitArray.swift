@@ -1,60 +1,40 @@
 import Foundation
 
 /// An array of boolean values stored using individual bits, providing a compact memory footprint.
-/// Features constant time random access and amortized constant time insertion at the end.
-///
-/// Conforms to:
-/// - `MutableCollection`
-/// - `RangeReplaceableCollection`
-/// - `ExpressibleByArrayLiteral`
-/// - `Equatable`
-/// - `Hashable`
-/// - `CustomStringConvertible`
 public struct BitArray: Hashable, RangeReplaceableCollection {
     
-    // MARK: - Properties and Storage
+    // MARK: - Storage
     
-    /// Structure holding the bits
     private var storage: [Int]
-    
-    /// Number of bits stored in the bit array
     public private(set) var count: Int
-    
-    /// Number of bits set to `true`
     public private(set) var cardinality: Int
     
-    /// Constants for bit manipulation
     private struct Constants {
         static let IntSize = MemoryLayout<Int>.size * 8
     }
     
     // MARK: - Initializers
     
-    /// Creates an empty bit array
     public init() {
         storage = []
         count = 0
         cardinality = 0
     }
     
-    /// Creates a bit array from a boolean sequence
     public init<S: Sequence>(_ elements: S) where S.Element == Bool {
         self.init()
         elements.forEach { append($0) }
     }
     
-    /// Creates a bit array from binary data
     public init(data: Data) {
         self.init()
         data.forEach { byte in
             for bitIndex in 0..<8 {
-                let bit = (byte >> (7 - bitIndex)) & 1
-                append(bit == 1)
+                append(((byte >> (7 - bitIndex)) & 1 == 1)
             }
         }
     }
     
-    /// Creates a bit array from a binary string
     public init?<S: StringProtocol>(binaryString: S) {
         self.init()
         for char in binaryString {
@@ -66,18 +46,10 @@ public struct BitArray: Hashable, RangeReplaceableCollection {
         }
     }
     
-    /// Creates a bit array from UInt11 values
-    init<S: Sequence>(_ elements: S) where S.Element == UInt11 {
-        let binaryString = elements.map(\.binaryString).joined()
-        self.init(binaryString: binaryString)!
-    }
-    
-    /// Creates a bit array from integer representations
     public init(intRepresentation: [Int]) {
         self.init(intRepresentation.map { $0 != 0 })
     }
     
-    /// Creates a bit array with repeating values
     public init(repeating repeatedValue: Bool, count: Int) {
         storage = []
         self.count = 0
@@ -106,18 +78,16 @@ public struct BitArray: Hashable, RangeReplaceableCollection {
     public var startIndex: Int { 0 }
     public var endIndex: Int { count }
     
-    public func index(after i: Int) -> Int {
-        return i + 1
-    }
+    public func index(after i: Int) -> Int { i + 1 }
     
     public subscript(position: Int) -> Bool {
         get {
-            precondition(position >= 0 && position < count, "Index out of bounds")
+            precondition(indices.contains(position), "Index out of bounds")
             let (arrayIndex, bitIndex) = indexPath(for: position)
             return storage[arrayIndex] & (1 << bitIndex) != 0
         }
         set {
-            precondition(position >= 0 && position < count, "Index out of bounds")
+            precondition(indices.contains(position), "Index out of bounds")
             setValue(newValue, at: position)
         }
     }
@@ -130,52 +100,46 @@ public struct BitArray: Hashable, RangeReplaceableCollection {
     ) where C.Element == Bool {
         precondition(subrange.lowerBound >= 0 && subrange.upperBound <= count, "Range out of bounds")
         
-        // Calculate new size
-        let newCount = count - subrange.count + newElements.count
-        var newStorage = [Int]()
-        var newCardinality = 0
+        // Convert to array once for multiple accesses
+        let newElementsArray = Array(newElements)
+        let removalCount = subrange.count
+        let insertionCount = newElementsArray.count
+        let delta = insertionCount - removalCount
         
-        // Pre-calculate needed capacity
-        let neededInts = (newCount + Constants.IntSize - 1) / Constants.IntSize
-        newStorage.reserveCapacity(neededInts)
+        // Adjust storage capacity if needed
+        if delta > 0 {
+            reserveCapacity(count + delta)
+        }
         
-        // Helper to add bits efficiently
-        func appendBits(_ bits: [Bool]) {
-            for bit in bits {
-                let (arrayIndex, bitIndex) = indexPath(for: newStorage.count * Constants.IntSize + newCardinality)
-                if arrayIndex >= newStorage.count {
-                    newStorage.append(0)
-                }
-                if bit {
-                    newStorage[arrayIndex] |= (1 << bitIndex)
-                    newCardinality += 1
+        // Shift elements after the range
+        if delta != 0 {
+            for i in stride(from: count - 1, through: subrange.upperBound, by: -1) {
+                let newPosition = i + delta
+                if newPosition < count {
+                    self[newPosition] = self[i]
                 }
             }
         }
         
-        // Head before replacement range
-        if subrange.lowerBound > 0 {
-            appendBits(Array(self[0..<subrange.lowerBound]))
+        // Insert new elements
+        for (offset, element) in newElementsArray.enumerated() {
+            let position = subrange.lowerBound + offset
+            if position < count {
+                self[position] = element
+            } else {
+                append(element)
+            }
         }
         
-        // New elements
-        appendBits(Array(newElements))
-        
-        // Tail after replacement range
-        if subrange.upperBound < count {
-            appendBits(Array(self[subrange.upperBound..<count]))
+        // Remove leftover elements if new range is smaller
+        if delta < 0 {
+            removeLast(-delta)
         }
-        
-        storage = newStorage
-        count = newCount
-        cardinality = newCardinality
     }
     
     public mutating func reserveCapacity(_ minimumCapacity: Int) {
         let neededInts = (minimumCapacity + Constants.IntSize - 1) / Constants.IntSize
-        if neededInts > storage.capacity {
-            storage.reserveCapacity(neededInts)
-        }
+        storage.reserveCapacity(neededInts)
     }
     
     // MARK: - Bit Manipulation
@@ -192,8 +156,7 @@ public struct BitArray: Hashable, RangeReplaceableCollection {
         case (true, false):
             storage[arrayIndex] &= ~mask
             cardinality -= 1
-        default:
-            break
+        default: break
         }
     }
     
@@ -201,7 +164,7 @@ public struct BitArray: Hashable, RangeReplaceableCollection {
         return (logicalIndex / Constants.IntSize, logicalIndex % Constants.IntSize)
     }
     
-    // MARK: - Adding and Removing Bits
+    // MARK: - Mutations
     
     public mutating func append(_ bit: Bool) {
         let (arrayIndex, bitIndex) = indexPath(for: count)
@@ -213,13 +176,11 @@ public struct BitArray: Hashable, RangeReplaceableCollection {
     }
     
     public mutating func insert(_ bit: Bool, at index: Int) {
-        precondition(index >= 0 && index <= count, "Index out of bounds")
         replaceSubrange(index..<index, with: CollectionOfOne(bit))
     }
     
     @discardableResult
     public mutating func remove(at index: Int) -> Bool {
-        precondition(index >= 0 && index < count, "Index out of bounds")
         let element = self[index]
         replaceSubrange(index..<(index + 1), with: EmptyCollection())
         return element
@@ -241,15 +202,14 @@ public struct BitArray: Hashable, RangeReplaceableCollection {
         cardinality = 0
     }
     
-    // MARK: - Convenience Properties
+    // MARK: - Convenience
     
     public var first: Bool? { isEmpty ? nil : self[0] }
     public var last: Bool? { isEmpty ? nil : self[count - 1] }
 }
 
 // MARK: - Protocol Conformances
-extension BitArray: MutableCollection {}
-extension BitArray: RandomAccessCollection {}
+extension BitArray: MutableCollection, RandomAccessCollection {}
 
 extension BitArray: ExpressibleByArrayLiteral {
     public init(arrayLiteral elements: Bool...) {
@@ -262,11 +222,9 @@ extension BitArray: CustomStringConvertible {
     public var binaryString: String { map { $0 ? "1" : "0" }.joined() }
 }
 
-// MARK: - Conversion Utilities
+// MARK: - Conversion
 extension BitArray {
-    public func asBoolArray() -> [Bool] {
-        return Array(self)
-    }
+    public func asBoolArray() -> [Bool] { Array(self) }
     
     public func asBytes() -> [UInt8] {
         let numBytes = (count + 7) / 8
@@ -281,35 +239,21 @@ extension BitArray {
         return bytes
     }
     
-    public func asData() -> Data {
-        return Data(asBytes())
-    }
+    public func asData() -> Data { Data(asBytes()) }
 }
 
 // MARK: - Equality
 extension BitArray: Equatable {
     public static func == (lhs: BitArray, rhs: BitArray) -> Bool {
-        guard lhs.count == rhs.count, lhs.storage.count == rhs.storage.count else {
-            return false
-        }
-        
-        for i in 0..<lhs.storage.count {
-            if lhs.storage[i] != rhs.storage[i] {
-                return false
-            }
-        }
-        
-        return true
+        guard lhs.count == rhs.count else { return false }
+        return lhs.elementsEqual(rhs)
     }
 }
 
-// MARK: - UInt11 Simulation (for completeness)
-public struct UInt11 {
-    let value: UInt16
-    var binaryString: String { String(value, radix: 2).leftPadding(toLength: 11, withPad: "0") }
-    
-    init(_ value: UInt16) {
-        precondition(value < 2048, "UInt11 value out of range")
-        self.value = value
+// MARK: - String Padding Helper
+extension String {
+    func leftPadding(toLength length: Int, withPad pad: String) -> String {
+        guard count < length else { return self }
+        return String(repeating: pad, count: length - count) + self
     }
 }
