@@ -30,7 +30,7 @@ public struct BitArray: Hashable, RangeReplaceableCollection {
         self.init()
         data.forEach { byte in
             for bitIndex in 0..<8 {
-                append(((byte >> (7 - bitIndex)) & 1 == 1)
+               append(((byte >> (7 - bitIndex)) & 1) == 1)
             }
         }
     }
