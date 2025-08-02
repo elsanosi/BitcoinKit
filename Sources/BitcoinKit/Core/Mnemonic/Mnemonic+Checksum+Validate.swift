@@ -72,7 +72,7 @@ public extension Mnemonic {
             return indexAs11Bits
         }
 
-        let bitArray = BitArray(indices)
+        let bitArray = BitArray(uInt11Values: indices)
 
         let checksumLength = mnemonicWords.count / 3
 
