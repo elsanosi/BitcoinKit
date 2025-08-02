@@ -228,9 +228,17 @@ public class _HDKey {
             //if BN_is_zero(privateKeyNum) {
             //    return nil
             //}
-            if privateKeyNum.pointee.top == 0 { // BN_is_zero
-                return nil
-            }
+            // BitcoinKit.Private.swift (modified section)
+
+    // BEFORE (incorrect)
+    // if privateKeyNum.pointee.top == 0 {
+    //     return nil
+    // }
+
+    // AFTER (correct)
+    if BN_is_zero(privateKeyNum) == 1 {
+    return nil
+        }
             let numBytes = ((BN_num_bits(privateKeyNum)+7)/8) // BN_num_bytes
             result = Data(count: Int(numBytes))
             result.withUnsafeMutableBytes { (ptr: UnsafeMutableRawBufferPointer) in
