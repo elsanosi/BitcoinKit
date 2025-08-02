@@ -30,14 +30,14 @@ public struct BitArray: Hashable, RangeReplaceableCollection {
         elements.forEach { append($0) }
     }
     
-    public init(data: Data) {
-        self.init()
-        data.forEach { byte in
-            for bitIndex in 0..<8 {
-               append(((byte >> (7 - bitIndex)) & 1) == 1)
-            }
+   public init(data: Data) {
+    self.init()
+    data.forEach { byte in
+        for bitIndex in (0..<8).reversed() {  // Process MSB first
+            append((Int(byte) & (1 << bitIndex)) != 0)
         }
     }
+}
     
     public init?<S: StringProtocol>(binaryString: S) {
         self.init()
