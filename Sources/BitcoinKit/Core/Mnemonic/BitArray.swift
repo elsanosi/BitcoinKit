@@ -14,6 +14,10 @@ public struct BitArray: Hashable, RangeReplaceableCollection {
     }
     
     // MARK: - Initializers
+
+    public init<C: Collection>(uInt11Values: C) where C.Element == UInt11 {
+    self.init(uInt11Values.map { $0 != UInt11(0) })
+}
     
     public init() {
         storage = []
